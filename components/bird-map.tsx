@@ -1,12 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type {
-  LayerGroup,
-  Map as LeafletMap,
-  Marker,
-  TileLayer,
-} from "leaflet";
+import type { LayerGroup, Map as LeafletMap, Marker } from "leaflet";
 import {
   MigrationField,
   type GeoSample,
@@ -30,22 +25,7 @@ const EUROPE_BOUNDS: [[number, number], [number, number]] = [
 const RADAR_ICON_PX = 9;
 const FIELD_PANE = "bird-field";
 
-/**
- * Esri's Gray Canvas: land, water, borders and country names, and nothing
- * else. OpenStreetMap's standard tiles bake roads, parks and ferry lines into
- * the image, which no stylesheet can take back out.
- */
-function basemapUrl(theme: Theme): string {
-  const style = theme === "dark" ? "Dark" : "Light";
-  return `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_${style}_Gray_Base/MapServer/tile/{z}/{y}/{x}`;
-}
-
-/**
- * Past zoom 6 the canvas starts drawing motorways and towns. Tiles are never
- * fetched deeper than this; Leaflet enlarges them instead. Radars are 150 km
- * apart, so zooming further in would not show the birds any better.
- */
-const BASEMAP_NATIVE_ZOOM = 6;
+/** Radars are 150 km apart; zooming further in shows the birds no better. */
 const MAX_ZOOM = 8;
 
 interface BirdMapProps {
@@ -86,9 +66,6 @@ export function BirdMap({ radars, frame, theme, showRadars }: BirdMapProps) {
   const fieldRef = useRef<MigrationField | null>(null);
   const markersRef = useRef<Map<string, Marker>>(new Map());
   const markerGroupRef = useRef<LayerGroup | null>(null);
-  const basemapRef = useRef<TileLayer | null>(null);
-  // Read once when the map is built; later changes go through setUrl.
-  const initialThemeRef = useRef(theme);
   const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
@@ -117,11 +94,11 @@ export function BirdMap({ radars, frame, theme, showRadars }: BirdMapProps) {
       });
 
       map.attributionControl.setPrefix(false);
-      basemapRef.current = L.tileLayer(basemapUrl(initialThemeRef.current), {
+      // Same basemap as _food: OSM's PNG tiles, held back to grey in CSS.
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution:
-          'Tiles &copy; <a href="https://www.esri.com">Esri</a>' +
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' +
           ' &middot; Bird data <a href="https://aloftdata.eu">Aloft</a> (ENRAM, CC0)',
-        maxNativeZoom: BASEMAP_NATIVE_ZOOM,
         maxZoom: MAX_ZOOM,
       }).addTo(map);
 
@@ -153,7 +130,6 @@ export function BirdMap({ radars, frame, theme, showRadars }: BirdMapProps) {
       mapRef.current?.remove();
       mapRef.current = null;
       markerGroupRef.current = null;
-      basemapRef.current = null;
       markers.clear();
       setMapReady(false);
     };
@@ -162,7 +138,6 @@ export function BirdMap({ radars, frame, theme, showRadars }: BirdMapProps) {
 
   useEffect(() => {
     fieldRef.current?.setTheme(theme);
-    basemapRef.current?.setUrl(basemapUrl(theme));
   }, [theme, mapReady]);
 
   useEffect(() => {
