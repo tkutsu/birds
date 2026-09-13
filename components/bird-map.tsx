@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Map as LeafletMap, LayerGroup, Marker } from "leaflet";
+import type {
+  LayerGroup,
+  Map as LeafletMap,
+  Marker,
+  TileLayer,
+} from "leaflet";
 import {
   MigrationField,
   type GeoSample,
@@ -25,11 +30,31 @@ const EUROPE_BOUNDS: [[number, number], [number, number]] = [
 const RADAR_ICON_PX = 9;
 const FIELD_PANE = "bird-field";
 
+/**
+ * Esri's Gray Canvas: land, water, borders and country names, and nothing
+ * else. OpenStreetMap's standard tiles bake roads, parks and ferry lines into
+ * the image, which no stylesheet can take back out.
+ */
+function basemapUrl(theme: Theme): string {
+  const style = theme === "dark" ? "Dark" : "Light";
+  return `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_${style}_Gray_Base/MapServer/tile/{z}/{y}/{x}`;
+}
+
+/**
+ * Past zoom 6 the canvas starts drawing motorways and towns. Tiles are never
+ * fetched deeper than this; Leaflet enlarges them instead. Radars are 150 km
+ * apart, so zooming further in would not show the birds any better.
+ */
+const BASEMAP_NATIVE_ZOOM = 6;
+const MAX_ZOOM = 8;
+
 interface BirdMapProps {
   radars: readonly Radar[];
   /** The moment being shown, or undefined before the data lands. */
   frame: NightFrame | undefined;
   theme: Theme;
+  /** Radar stations are a layer the visitor opts into, off by default. */
+  showRadars: boolean;
 }
 
 function radarTooltip(
@@ -54,13 +79,16 @@ function radarTooltip(
 }
 
 /** The Leaflet map, the interpolated field over it, and the radars themselves. */
-export function BirdMap({ radars, frame, theme }: BirdMapProps) {
+export function BirdMap({ radars, frame, theme, showRadars }: BirdMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const leafletRef = useRef<typeof import("leaflet") | null>(null);
   const fieldRef = useRef<MigrationField | null>(null);
   const markersRef = useRef<Map<string, Marker>>(new Map());
   const markerGroupRef = useRef<LayerGroup | null>(null);
+  const basemapRef = useRef<TileLayer | null>(null);
+  // Read once when the map is built; later changes go through setUrl.
+  const initialThemeRef = useRef(theme);
   const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
@@ -79,7 +107,7 @@ export function BirdMap({ radars, frame, theme }: BirdMapProps) {
         center: EUROPE_CENTER,
         zoom: 5,
         minZoom: 4,
-        maxZoom: 9,
+        maxZoom: MAX_ZOOM,
         maxBounds: EUROPE_BOUNDS,
         maxBoundsViscosity: 1,
         zoomSnap: 1,
@@ -89,12 +117,12 @@ export function BirdMap({ radars, frame, theme }: BirdMapProps) {
       });
 
       map.attributionControl.setPrefix(false);
-      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      basemapRef.current = L.tileLayer(basemapUrl(initialThemeRef.current), {
         attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' +
+          'Tiles &copy; <a href="https://www.esri.com">Esri</a>' +
           ' &middot; Bird data <a href="https://aloftdata.eu">Aloft</a> (ENRAM, CC0)',
-        className: "bird-map-tiles",
-        maxZoom: 19,
+        maxNativeZoom: BASEMAP_NATIVE_ZOOM,
+        maxZoom: MAX_ZOOM,
       }).addTo(map);
 
       // Above the tiles, below the radar markers. The field is an overlay on
@@ -102,7 +130,7 @@ export function BirdMap({ radars, frame, theme }: BirdMapProps) {
       const pane = map.createPane(FIELD_PANE);
       pane.style.zIndex = "250";
       fieldRef.current = new MigrationField(map, pane);
-      markerGroupRef.current = L.layerGroup().addTo(map);
+      markerGroupRef.current = L.layerGroup();
       mapRef.current = map;
       setMapReady(true);
 
@@ -125,6 +153,7 @@ export function BirdMap({ radars, frame, theme }: BirdMapProps) {
       mapRef.current?.remove();
       mapRef.current = null;
       markerGroupRef.current = null;
+      basemapRef.current = null;
       markers.clear();
       setMapReady(false);
     };
@@ -133,7 +162,16 @@ export function BirdMap({ radars, frame, theme }: BirdMapProps) {
 
   useEffect(() => {
     fieldRef.current?.setTheme(theme);
+    basemapRef.current?.setUrl(basemapUrl(theme));
   }, [theme, mapReady]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const group = markerGroupRef.current;
+    if (!map || !group || !mapReady) return;
+    if (showRadars) group.addTo(map);
+    else group.remove();
+  }, [showRadars, mapReady]);
 
   /* One marker per radar, built once: only their tooltips change per frame. */
   useEffect(() => {

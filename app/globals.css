@@ -64,17 +64,6 @@ summary {
   cursor: pointer;
 }
 
-/* The base map is context, not content: mute it hard so the density field is
-   the only saturated thing on screen. */
-.bird-map-tiles {
-  filter: saturate(0.25) contrast(0.9) brightness(1.04);
-}
-
-[data-theme="dark"] .bird-map-tiles {
-  filter: invert(1) hue-rotate(180deg) saturate(0.18) brightness(0.72)
-    contrast(1.05);
-}
-
 /* The interpolated density field and the particle flow. Leaflet's pane is
    translated as the map pans, so the element cancels that out and the canvases
    stay in viewport coordinates: see components/migration-field.ts. */

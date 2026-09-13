@@ -66,6 +66,23 @@ function SunIcon({ className }: { className?: string }) {
   );
 }
 
+function RadarIcon({ className }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" className={className} viewBox="0 0 16 16">
+      <g
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.4"
+      >
+        <circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none" />
+        <path d="M4.8 11.2a4.5 4.5 0 0 1 0-6.4M11.2 4.8a4.5 4.5 0 0 1 0 6.4" />
+        <path d="M2.6 13.4a7.6 7.6 0 0 1 0-10.8M13.4 2.6a7.6 7.6 0 0 1 0 10.8" />
+      </g>
+    </svg>
+  );
+}
+
 function Chip({ children }: { children: React.ReactNode }) {
   return (
     <span className="rounded-full bg-paper/90 px-3 py-1 text-xs shadow-lg backdrop-blur">
@@ -79,6 +96,7 @@ export function BirdApp() {
   const [nightIndex, setNightIndex] = useState(0);
   const [frameIndex, setFrameIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [showRadars, setShowRadars] = useState(false);
   const theme = useSyncExternalStore(subscribeToTheme, readTheme, serverTheme);
 
   const toggleTheme = () => {
@@ -103,6 +121,7 @@ export function BirdApp() {
         <BirdMap
           frame={frame}
           radars={payload?.radars ?? []}
+          showRadars={showRadars}
           theme={theme}
         />
 
@@ -137,18 +156,33 @@ export function BirdApp() {
         </div>
 
         <div className="absolute top-3 right-3 z-[500] flex flex-col items-end gap-2">
-          <button
-            aria-label="Toggle dark mode"
-            className="flex size-9 items-center justify-center rounded-full border border-ink/15 bg-paper/90 shadow-lg backdrop-blur transition hover:bg-paper"
-            onClick={toggleTheme}
-            type="button"
-          >
-            {theme === "dark" ? (
-              <SunIcon className="size-4" />
-            ) : (
-              <MoonIcon className="size-4" />
-            )}
-          </button>
+          <div className="flex gap-2">
+            <button
+              aria-pressed={showRadars}
+              className={`flex h-9 items-center gap-1.5 rounded-full border px-3 text-xs shadow-lg backdrop-blur transition ${
+                showRadars
+                  ? "border-signal/60 bg-paper text-signal"
+                  : "border-ink/15 bg-paper/90 hover:bg-paper"
+              }`}
+              onClick={() => setShowRadars((shown) => !shown)}
+              type="button"
+            >
+              <RadarIcon className="size-4" />
+              Radars
+            </button>
+            <button
+              aria-label="Toggle dark mode"
+              className="flex size-9 items-center justify-center rounded-full border border-ink/15 bg-paper/90 shadow-lg backdrop-blur transition hover:bg-paper"
+              onClick={toggleTheme}
+              type="button"
+            >
+              {theme === "dark" ? (
+                <SunIcon className="size-4" />
+              ) : (
+                <MoonIcon className="size-4" />
+              )}
+            </button>
+          </div>
 
           {nights.length > 1 && (
             <select
