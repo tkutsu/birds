@@ -118,27 +118,40 @@ summary {
   border-top-color: var(--paper);
 }
 
-/* Leaflet's own chrome, restyled to match the app shell. */
+/* Leaflet's own chrome, restyled to match the app shell. Every selector here
+   is prefixed with .leaflet-container because Leaflet's stylesheet hard-codes
+   light colours at that specificity, and a plainer selector loses to it. */
 .leaflet-container {
   background: var(--paper);
   font-family: inherit;
 }
 
-.leaflet-bar a,
-.leaflet-control-attribution {
+.leaflet-container .leaflet-bar {
+  border-color: rgb(var(--ink-rgb) / 0.15);
+}
+
+.leaflet-container .leaflet-bar a,
+.leaflet-container .leaflet-control-attribution {
   color: var(--ink);
   background: rgb(var(--surface-rgb) / 0.92);
 }
 
-.leaflet-bar a {
+.leaflet-container .leaflet-bar a {
   border-bottom-color: rgb(var(--ink-rgb) / 0.15);
 }
 
-.leaflet-bar a:hover {
+.leaflet-container .leaflet-bar a:hover {
   background: rgb(var(--surface-rgb) / 1);
 }
 
-.leaflet-control-attribution a {
+/* At the zoom limit: the same surface, with the glyph faded, rather than
+   Leaflet's light grey. */
+.leaflet-container .leaflet-bar a.leaflet-disabled {
+  color: rgb(var(--ink-rgb) / 0.3);
+  background: rgb(var(--surface-rgb) / 0.92);
+}
+
+.leaflet-container .leaflet-control-attribution a {
   color: inherit;
 }
 
