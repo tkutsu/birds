@@ -2,6 +2,7 @@ import type { Map as LeafletMap } from "leaflet";
 import {
   BIRD_SPAN_PX,
   BIRD_STROKE_PX,
+  birdVisibility,
   birdWings,
   headingOf,
   WINGBEAT_S,
@@ -79,8 +80,12 @@ interface Bird {
   /** Wingbeat offset, 0-1, so the flock does not flap in unison. */
   phase: number;
   heading: number;
-  /** Drawn density where the bird was placed, for thinning on a new frame. */
+  /** Drawn density where the bird was placed. */
   density: number;
+  /** The bird dies once the density around it falls to this share of `density`. */
+  threshold: number;
+  /** 0-1, fading as the density around the bird falls; see birdVisibility. */
+  visibility: number;
 }
 
 /** The interpolated field on the grid, for one view and one frame. */
@@ -96,6 +101,38 @@ interface FieldGrid {
   /** How many birds this view should hold. */
   target: number;
   scale: ZoomScale;
+}
+
+function lerp(from: number, to: number, t: number): number {
+  return from + (to - from) * t;
+}
+
+/** Two grids of the same view blended, for a frame that lands mid-blend. */
+function blendGrids(from: FieldGrid, to: FieldGrid, t: number): FieldGrid {
+  const cells = to.density.length;
+  const density = new Float32Array(cells);
+  const u = new Float32Array(cells);
+  const v = new Float32Array(cells);
+  const perCell = new Float32Array(cells);
+  const cellArea = CELL_PX * CELL_PX * to.scale.factor;
+  for (let index = 0; index < cells; index += 1) {
+    density[index] = lerp(from.density[index], to.density[index], t);
+    u[index] = lerp(from.u[index], to.u[index], t);
+    v[index] = lerp(from.v[index], to.v[index], t);
+    perCell[index] = density[index] * cellArea;
+  }
+  return {
+    ...to,
+    density,
+    u,
+    v,
+    totals: cumulative(perCell),
+    target: Math.round(lerp(from.target, to.target, t)),
+  };
+}
+
+function sameView(a: FieldGrid, b: FieldGrid): boolean {
+  return a.cols === b.cols && a.rows === b.rows && a.scale.factor === b.scale.factor;
 }
 
 function prefersReducedMotion(): boolean {
@@ -123,6 +160,14 @@ export class MigrationField {
   private samples: readonly GeoSample[] = [];
   private theme: Theme = "dark";
   private grid: FieldGrid | null = null;
+  /**
+   * While the timeline plays, the grid the field is blending away from. Each
+   * step of the night is 15 minutes; without the blend, density and heading
+   * would jump at every step instead of flowing into the next.
+   */
+  private previous: FieldGrid | null = null;
+  private blendStart = 0;
+  private blendMs = 0;
   private birds: Bird[] = [];
   private width = 0;
   private height = 0;
@@ -163,9 +208,13 @@ export class MigrationField {
     if (this.reducedMotion) this.drawStill();
   }
 
-  setSamples(samples: readonly GeoSample[]): void {
+  /**
+   * `blendMs` is how long to take moving from the current frame to this one:
+   * the playback step while the night plays, 0 when scrubbing by hand.
+   */
+  setSamples(samples: readonly GeoSample[], blendMs = 0): void {
     this.samples = samples;
-    this.render("frame");
+    this.render("frame", blendMs);
   }
 
   private resize(): boolean {
@@ -205,31 +254,45 @@ export class MigrationField {
 
   /**
    * Rebuilds the grid. A zoom invalidates every bird's screen position, so the
-   * flock is replaced. A pan carries the birds with the
-   * ground. A new frame only changes where birds should be, so the flock is
-   * thinned and topped up in place.
+   * flock is replaced. A pan carries the birds with the ground. A new frame
+   * only changes where birds should be: scrubbed, the flock settles at once;
+   * playing, it blends there over the step.
    */
-  private render(reason: "rescale" | "pan" | "frame"): void {
+  private render(reason: "rescale" | "pan" | "frame", blendMs = 0): void {
     const resized = this.resize();
     if (!resized) return;
     const shift = this.reposition();
-    this.grid = this.buildGrid();
+    const now = performance.now();
+    const current = this.blended(now);
+    const next = this.buildGrid();
+
+    const blending =
+      reason === "frame" &&
+      blendMs > 0 &&
+      !this.reducedMotion &&
+      current !== null &&
+      next !== null &&
+      sameView(current, next);
+    this.previous = blending ? current : null;
+    this.blendStart = now;
+    this.blendMs = blending ? blendMs : 0;
+    this.grid = next;
 
     if (reason === "rescale") {
       this.birds = [];
+      this.topUp(true);
     } else {
       for (const bird of this.birds) {
         bird.x += shift.x;
         bird.y += shift.y;
       }
-      this.thin();
+      if (!blending) this.settle();
     }
     // Dot trails are painted in screen space; a new view would smear them.
     if (reason !== "frame") {
       this.canvas.getContext("2d")?.clearRect(0, 0, this.width, this.height);
       this.dotImage?.data.fill(0);
     }
-    this.topUp(reason === "rescale");
 
     if (this.reducedMotion) {
       this.drawStill();
@@ -315,15 +378,45 @@ export class MigrationField {
     return row * grid.cols + col;
   }
 
-  /** A new bird, placed with probability proportional to the density. */
-  private spawn(): Bird | null {
+  /** 0-1 through the current blend; 1 when there is none. */
+  private progress(now: number): number {
+    if (!this.previous || this.blendMs <= 0) return 1;
+    return Math.min(1, (now - this.blendStart) / this.blendMs);
+  }
+
+  /** The field as it stands at `now`, mid-blend or not. */
+  private blended(now: number): FieldGrid | null {
+    const t = this.progress(now);
+    if (!this.grid || !this.previous || t >= 1) return this.grid;
+    return blendGrids(this.previous, this.grid, t);
+  }
+
+  private densityAt(cell: number, t: number): number {
+    const grid = this.grid;
+    if (!grid) return 0;
+    const from = this.previous;
+    return from && t < 1
+      ? lerp(from.density[cell], grid.density[cell], t)
+      : grid.density[cell];
+  }
+
+  /**
+   * A new bird, placed with probability proportional to the density. Mid-blend
+   * it is placed by the old field or the new one in proportion to how far the
+   * blend has got, so arrivals shift across smoothly too.
+   */
+  private spawn(t = 1): Bird | null {
     const grid = this.grid;
     if (!grid) return null;
-    const index = pickWeighted(grid.totals, Math.random());
+    const from = t < 1 ? this.previous : null;
+    const source = from && Math.random() > t ? from : grid;
+    const index = pickWeighted(source.totals, Math.random());
     if (index < 0) return null;
     const x = ((index % grid.cols) + Math.random()) * CELL_PX;
     const y = (Math.floor(index / grid.cols) + Math.random()) * CELL_PX;
-    const moving = Math.hypot(grid.u[index], grid.v[index]) >= MIN_FLOW_MPS;
+    const u = from ? lerp(from.u[index], grid.u[index], t) : grid.u[index];
+    const v = from ? lerp(from.v[index], grid.v[index], t) : grid.v[index];
+    const moving = Math.hypot(u, v) >= MIN_FLOW_MPS;
     return {
       x,
       y,
@@ -331,41 +424,43 @@ export class MigrationField {
       life: MIN_LIFE_MS + Math.random() * (MAX_LIFE_MS - MIN_LIFE_MS),
       phase: Math.random(),
       // A bird with no resolved heading still counts; it just faces anywhere.
-      heading: moving
-        ? headingOf(grid.u[index], grid.v[index])
-        : Math.random() * 2 * Math.PI,
-      density: grid.density[index],
+      heading: moving ? headingOf(u, v) : Math.random() * 2 * Math.PI,
+      density: this.densityAt(index, t),
+      threshold: Math.random(),
+      visibility: 1,
     };
   }
 
   /**
-   * On a new frame, each bird survives with the ratio of the density now to
-   * the density it was placed at, so a thinning flock thins in place instead
-   * of lingering until its birds age out.
+   * Applies the survival rule to every bird at once, for a frame that was
+   * scrubbed to rather than played into. See birdVisibility.
    */
-  private thin(): void {
-    const grid = this.grid;
-    if (!grid) {
-      this.birds = [];
-      return;
-    }
+  private settle(): void {
     this.birds = this.birds.filter((bird) => {
-      const index = this.cellAt(bird.x, bird.y);
-      if (index < 0 || bird.density <= 0) return false;
-      const now = grid.density[index];
-      const keep = Math.random() < Math.min(1, now / bird.density);
-      if (keep) bird.density = now;
-      return keep;
+      const cell = this.cellAt(bird.x, bird.y);
+      if (cell < 0 || bird.density <= 0) return false;
+      bird.visibility = birdVisibility(
+        this.densityAt(cell, 1) / bird.density,
+        bird.threshold,
+      );
+      return bird.visibility > 0;
     });
+    this.topUp(false);
   }
 
-  private topUp(freshView: boolean): void {
-    const target = this.grid?.target ?? 0;
+  private topUp(freshView: boolean, t = 1): void {
+    const grid = this.grid;
+    const from = t < 1 ? this.previous : null;
+    const target = !grid
+      ? 0
+      : from
+        ? Math.round(lerp(from.target, grid.target, t))
+        : grid.target;
     while (this.birds.length > target) {
       this.birds.splice(Math.floor(Math.random() * this.birds.length), 1);
     }
     while (this.birds.length < target) {
-      const bird = this.spawn();
+      const bird = this.spawn(t);
       if (!bird) break;
       // A fresh view starts every bird at a random point in its life, or the
       // whole flock would fade in, and later out, in unison.
@@ -387,19 +482,35 @@ export class MigrationField {
     this.lastTick = now;
     const seconds = elapsed / 1000;
     const grid = this.grid;
+    const t = this.progress(now);
+    const from = t < 1 ? this.previous : null;
+    if (!from) this.previous = null;
 
-    for (let index = 0; index < this.birds.length; index += 1) {
-      const bird = this.birds[index];
+    const birds = this.birds;
+    for (let index = birds.length - 1; index >= 0; index -= 1) {
+      const bird = birds[index];
       bird.age += elapsed;
       bird.phase = (bird.phase + seconds / WINGBEAT_S) % 1;
       const cell = this.cellAt(bird.x, bird.y);
       if (bird.age > bird.life || cell < 0 || !grid) {
-        const fresh = this.spawn();
-        if (fresh) this.birds[index] = fresh;
+        const fresh = this.spawn(t);
+        if (fresh) birds[index] = fresh;
         continue;
       }
-      const u = grid.u[cell];
-      const v = grid.v[cell];
+      // Flying into thinner sky, towards the edge of the network or into a
+      // falling part of the night, a bird fades and then dies, instead of
+      // stalling where the field runs out and piling up there.
+      bird.visibility =
+        bird.density > 0
+          ? birdVisibility(this.densityAt(cell, t) / bird.density, bird.threshold)
+          : 0;
+      if (bird.visibility <= 0) {
+        birds[index] = birds[birds.length - 1];
+        birds.pop();
+        continue;
+      }
+      const u = from ? lerp(from.u[cell], grid.u[cell], t) : grid.u[cell];
+      const v = from ? lerp(from.v[cell], grid.v[cell], t) : grid.v[cell];
       if (Math.hypot(u, v) >= MIN_FLOW_MPS) {
         bird.heading = headingOf(u, v);
         bird.x += u * PX_PER_MPS * seconds;
@@ -407,6 +518,8 @@ export class MigrationField {
         bird.y -= v * PX_PER_MPS * seconds;
       }
     }
+    // Replace the birds that died above, placed by the blended field.
+    this.topUp(false, t);
 
     this.draw(context);
   }
@@ -438,11 +551,18 @@ export class MigrationField {
       const x = bird.x | 0;
       const y = bird.y | 0;
       if (x < 0 || y < 0 || x >= width || y >= height) continue;
+      const fade = Math.min(
+        bird.visibility,
+        bird.age / FADE_MS,
+        (bird.life - bird.age) / FADE_MS,
+      );
+      if (fade <= 0) continue;
       const offset = (y * width + x) * 4;
       data[offset] = r;
       data[offset + 1] = g;
       data[offset + 2] = b;
-      data[offset + 3] = DOT_ALPHA;
+      // Never dim a pixel another dot's trail is still lighting.
+      data[offset + 3] = Math.max(data[offset + 3], (DOT_ALPHA * Math.min(1, fade)) | 0);
     }
 
     dots.putImageData(this.dotImage, 0, 0);
@@ -467,7 +587,13 @@ export class MigrationField {
       context.strokeStyle = `rgba(${this.ink}, ${alpha})`;
       context.beginPath();
       for (const bird of this.birds) {
-        const fade = Math.min(1, bird.age / FADE_MS, (bird.life - bird.age) / FADE_MS);
+        const fade = Math.min(
+          1,
+          bird.visibility,
+          bird.age / FADE_MS,
+          (bird.life - bird.age) / FADE_MS,
+        );
+        if (fade <= 0) continue;
         const bucket = fade < 0.5 ? 0 : fade < 1 ? 0.5 : 1;
         if (bucket !== floor) continue;
         const [lx, ly, bx, by, rx, ry] = birdWings(

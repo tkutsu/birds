@@ -5,7 +5,7 @@ import { formatClock } from "@/lib/format";
 import type { Night } from "@/lib/types";
 
 /** Milliseconds per frame at play: a night of 15-minute steps in ~13 seconds. */
-const PLAY_STEP_MS = 240;
+export const PLAY_STEP_MS = 240;
 
 interface TimelineControlsProps {
   night: Night;

@@ -35,6 +35,8 @@ interface BirdMapProps {
   theme: Theme;
   /** Radar stations are a layer the visitor opts into, off by default. */
   showRadars: boolean;
+  /** How long to blend into each new frame: the playback step, or 0. */
+  blendMs: number;
 }
 
 function radarTooltip(
@@ -59,7 +61,13 @@ function radarTooltip(
 }
 
 /** The Leaflet map, the interpolated field over it, and the radars themselves. */
-export function BirdMap({ radars, frame, theme, showRadars }: BirdMapProps) {
+export function BirdMap({
+  radars,
+  frame,
+  theme,
+  showRadars,
+  blendMs,
+}: BirdMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const leafletRef = useRef<typeof import("leaflet") | null>(null);
@@ -67,6 +75,13 @@ export function BirdMap({ radars, frame, theme, showRadars }: BirdMapProps) {
   const markersRef = useRef<Map<string, Marker>>(new Map());
   const markerGroupRef = useRef<LayerGroup | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  // Read when a frame arrives, so starting or stopping playback does not
+  // itself count as a new frame.
+  const blendMsRef = useRef(blendMs);
+
+  useEffect(() => {
+    blendMsRef.current = blendMs;
+  }, [blendMs]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -204,7 +219,7 @@ export function BirdMap({ radars, frame, theme, showRadars }: BirdMapProps) {
         markersRef.current.get(radar.id)?.setTooltipContent(radar.name);
       }
     }
-    field.setSamples(samples);
+    field.setSamples(samples, blendMsRef.current);
   }, [frame, radars, mapReady]);
 
   return (

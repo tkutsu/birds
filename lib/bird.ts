@@ -47,3 +47,19 @@ export function birdWings(
 export function headingOf(u: number, v: number): number {
   return Math.atan2(u, v);
 }
+
+/**
+ * How visible a bird is as the density around it falls.
+ *
+ * `ratio` is the density where the bird is now over the density it was born
+ * into; `threshold` is the bird's own random cut-off, drawn once at birth. A
+ * bird is fully visible while its patch of sky is at least as busy as when it
+ * appeared and fades out linearly as the ratio falls to its threshold, where
+ * it dies. Across a flock that makes the surviving share equal the density
+ * ratio, with no bird ever popping out.
+ */
+export function birdVisibility(ratio: number, threshold: number): number {
+  if (!(ratio > threshold)) return 0;
+  const span = Math.max(0.05, 1 - threshold);
+  return Math.min(1, (ratio - threshold) / span);
+}

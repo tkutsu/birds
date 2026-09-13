@@ -4,7 +4,10 @@ import { useMemo, useState, useSyncExternalStore } from "react";
 import { BirdMap } from "@/components/bird-map";
 import { Legend } from "@/components/legend";
 import type { Theme } from "@/components/migration-field";
-import { TimelineControls } from "@/components/timeline-controls";
+import {
+  PLAY_STEP_MS,
+  TimelineControls,
+} from "@/components/timeline-controls";
 import { useNights } from "@/hooks/use-nights";
 import {
   formatDensity,
@@ -119,6 +122,8 @@ export function BirdApp() {
     <div className="relative flex h-dvh flex-col">
       <div className="relative min-h-0 flex-1">
         <BirdMap
+          // While playing, each step blends into the next over the step.
+          blendMs={playing ? PLAY_STEP_MS : 0}
           frame={frame}
           radars={payload?.radars ?? []}
           showRadars={showRadars}
