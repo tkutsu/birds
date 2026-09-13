@@ -1,0 +1,14 @@
+node_modules/
+.next/
+out/
+build/
+next-env.d.ts
+tsconfig.tsbuildinfo
+.env*
+!.env.example
+
+# Generated at build time by scripts/build-data.ts
+public/data/
+
+# Planning notes, not part of the shipped app
+PLAN.md

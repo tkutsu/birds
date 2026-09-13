@@ -1,0 +1,25 @@
+name: Keep scheduled builds alive
+
+# GitHub switches off scheduled workflows after 60 days without repository
+# activity, which would quietly freeze the map on its last night. An empty
+# commit once a month counts as activity and changes nothing else. Pushes made
+# with the workflow token do not trigger other workflows, so this does not
+# redeploy the site.
+on:
+  schedule:
+    - cron: "23 5 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --allow-empty -m "Keep scheduled workflows enabled"
+          git push

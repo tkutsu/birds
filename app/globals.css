@@ -1,0 +1,179 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+/* The theme is a data attribute set before hydration, not the OS setting. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-signal: var(--signal);
+  --font-display: var(--font-display);
+}
+
+:root {
+  color-scheme: light;
+  --paper: #f3f1ea;
+  --paper-rgb: 243 241 234;
+  --ink: #1b1a17;
+  --ink-rgb: 27 26 23;
+  /* Mid step of the density ramp; 3.68:1 on the panel surface. */
+  --signal: #d25516;
+  --chart-bar: #d25516;
+  --surface-rgb: 255 255 255;
+  --font-display: "Avenir Next", Avenir, "Segoe UI", sans-serif;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  /* A night sky, because that is when the data happens. */
+  --paper: #0e1116;
+  --paper-rgb: 14 17 22;
+  --ink: #e8e6df;
+  --ink-rgb: 232 230 223;
+  /* 6.29:1 on the dark panel surface. */
+  --signal: #e07a2a;
+  --chart-bar: #e07a2a;
+  --surface-rgb: 32 38 48;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--paper);
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background-color: var(--paper);
+  font-family: var(--font-display);
+}
+
+button,
+input,
+select {
+  font-family: inherit;
+}
+
+button:not(:disabled),
+select:not(:disabled),
+summary {
+  cursor: pointer;
+}
+
+/* The base map is context, not content: mute it hard so the density field is
+   the only saturated thing on screen. */
+.bird-map-tiles {
+  filter: saturate(0.25) contrast(0.9) brightness(1.04);
+}
+
+[data-theme="dark"] .bird-map-tiles {
+  filter: invert(1) hue-rotate(180deg) saturate(0.18) brightness(0.72)
+    contrast(1.05);
+}
+
+/* The interpolated density field and the particle flow. Leaflet's pane is
+   translated as the map pans, so the element cancels that out and the canvases
+   stay in viewport coordinates: see components/migration-field.ts. */
+.bird-field {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.bird-field canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.bird-radar {
+  border-radius: 9999px;
+  background: rgb(var(--ink-rgb) / 0.55);
+  box-shadow: 0 0 0 1.5px rgb(var(--paper-rgb) / 0.85);
+  transition: background 120ms ease-out;
+}
+
+.bird-radar:hover {
+  background: var(--signal);
+}
+
+.bird-tooltip.leaflet-tooltip {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid rgb(var(--ink-rgb) / 0.12);
+  border-radius: 0.5rem;
+  color: var(--ink);
+  background: var(--paper);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.25);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.bird-tooltip.leaflet-tooltip-top::before {
+  border-top-color: var(--paper);
+}
+
+/* Leaflet's own chrome, restyled to match the app shell. */
+.leaflet-container {
+  background: var(--paper);
+  font-family: inherit;
+}
+
+.leaflet-bar a,
+.leaflet-control-attribution {
+  color: var(--ink);
+  background: rgb(var(--surface-rgb) / 0.92);
+}
+
+.leaflet-bar a {
+  border-bottom-color: rgb(var(--ink-rgb) / 0.15);
+}
+
+.leaflet-bar a:hover {
+  background: rgb(var(--surface-rgb) / 1);
+}
+
+.leaflet-control-attribution a {
+  color: inherit;
+}
+
+/* The scrub track is the night's own traffic chart, so the input draws none
+   of its own furniture. */
+.bird-range {
+  height: 100%;
+  appearance: none;
+  background: transparent;
+}
+
+.bird-range::-webkit-slider-runnable-track {
+  height: 100%;
+  background: transparent;
+}
+
+/* A playhead marking the minute, not a knob to grab. The height is explicit
+   because a percentage does not resolve on a thumb. */
+.bird-range::-webkit-slider-thumb {
+  width: 2px;
+  height: 2rem;
+  appearance: none;
+  background: var(--ink);
+  box-shadow: 0 0 0 1px rgb(var(--paper-rgb) / 0.7);
+}
+
+.bird-range::-moz-range-track {
+  height: 100%;
+  background: transparent;
+}
+
+.bird-range::-moz-range-thumb {
+  width: 2px;
+  height: 2rem;
+  border: 0;
+  border-radius: 0;
+  background: var(--ink);
+}
