@@ -64,6 +64,16 @@ summary {
   cursor: pointer;
 }
 
+/* The basemap is context, not content: grey and faded in both modes, as in
+   _food, so the birds are the only thing on screen that reads at a glance. */
+.leaflet-tile-pane {
+  filter: grayscale(1) opacity(0.45);
+}
+
+[data-theme="dark"] .leaflet-tile-pane {
+  filter: grayscale(1) brightness(0.6) invert(1) contrast(0.8) opacity(0.35);
+}
+
 /* The interpolated density field and the particle flow. Leaflet's pane is
    translated as the map pans, so the element cancels that out and the canvases
    stay in viewport coordinates: see components/migration-field.ts. */

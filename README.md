@@ -59,4 +59,4 @@ is not stretched to each night, so a quiet night looks quiet.
 ## Data
 
 [aloftdata.eu](https://aloftdata.eu), CC0. Radar positions from the OPERA radar
-database. Base map: Esri World Gray Canvas.
+database. Base map from OpenStreetMap contributors.
