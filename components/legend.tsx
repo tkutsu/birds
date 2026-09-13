@@ -77,8 +77,9 @@ export function Legend() {
         ))}
       </div>
       <p className="mt-1.5 max-w-[14rem] text-[0.65rem] leading-snug opacity-70">
-        More birds drawn means more in the sky, in proportion. They fly the
-        heading the radars measured, sped up to be visible.
+        Birds as drawn at the closest zoom. Zoom out and the same birds shrink,
+        then turn to dots. They fly the heading the radars measured, sped up to
+        be visible.
       </p>
     </div>
   );

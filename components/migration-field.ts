@@ -12,7 +12,7 @@ import {
   pickWeighted,
   type FieldSample,
 } from "@/lib/grid";
-import { drawnBirdDensity } from "@/lib/scale";
+import { drawnBirdDensity, zoomScale, type ZoomScale } from "@/lib/scale";
 
 /** One radar's reading, positioned. */
 export interface GeoSample {
@@ -58,8 +58,18 @@ const MIN_LIFE_MS = 1800;
 const MAX_LIFE_MS = 3600;
 /** Birds fade in and out over this long, so the flock never pops. */
 const FADE_MS = 300;
-/** A browser can draw this many before a phone starts dropping frames. */
+/**
+ * What a browser can animate inside a frame. Measured in Chromium at
+ * 1280x800: 6,000 stroked birds take about 11 ms, while 40,000 dots written
+ * straight into a pixel buffer take under 2 ms, trail fade included. Past the
+ * budget the whole flock is thinned evenly, which only happens on a busy
+ * night seen from far out.
+ */
 const MAX_BIRDS = 6000;
+const MAX_DOTS = 40000;
+/** Share of a dot's trail kept each frame; sets how long the trail is. */
+const DOT_TRAIL_KEEP = 0.84;
+const DOT_ALPHA = 220;
 
 interface Bird {
   x: number;
@@ -85,6 +95,7 @@ interface FieldGrid {
   totals: Float64Array;
   /** How many birds this view should hold. */
   target: number;
+  scale: ZoomScale;
 }
 
 function prefersReducedMotion(): boolean {
@@ -105,6 +116,9 @@ function prefersReducedMotion(): boolean {
 export class MigrationField {
   private readonly root: HTMLDivElement;
   private readonly canvas: HTMLCanvasElement;
+  /** Dots are drawn at CSS resolution into this buffer, then scaled up once. */
+  private readonly dotCanvas: HTMLCanvasElement;
+  private dotImage: ImageData | null = null;
 
   private samples: readonly GeoSample[] = [];
   private theme: Theme = "dark";
@@ -127,6 +141,7 @@ export class MigrationField {
     this.root = document.createElement("div");
     this.root.className = "bird-field";
     this.canvas = document.createElement("canvas");
+    this.dotCanvas = document.createElement("canvas");
     this.root.append(this.canvas);
     container.append(this.root);
 
@@ -167,6 +182,9 @@ export class MigrationField {
     this.canvas.width = Math.round(size.x * ratio);
     this.canvas.height = Math.round(size.y * ratio);
     this.canvas.getContext("2d")?.setTransform(ratio, 0, 0, ratio, 0, 0);
+    this.dotCanvas.width = size.x;
+    this.dotCanvas.height = size.y;
+    this.dotImage = null;
     return true;
   }
 
@@ -205,6 +223,11 @@ export class MigrationField {
         bird.y += shift.y;
       }
       this.thin();
+    }
+    // Dot trails are painted in screen space; a new view would smear them.
+    if (reason !== "frame") {
+      this.canvas.getContext("2d")?.clearRect(0, 0, this.width, this.height);
+      this.dotImage?.data.fill(0);
     }
     this.topUp(reason === "rescale");
 
@@ -257,7 +280,13 @@ export class MigrationField {
     const perCell = new Float32Array(cells);
     const u = new Float32Array(cells);
     const v = new Float32Array(cells);
-    const cellArea = CELL_PX * CELL_PX;
+    const scale = zoomScale(
+      this.map.getZoom(),
+      this.map.getMaxZoom(),
+      BIRD_SPAN_PX,
+    );
+    // Birds per cell at this zoom: the closest zoom's count for the same ground.
+    const cellArea = CELL_PX * CELL_PX * scale.factor;
     for (let row = 0; row < rows; row += 1) {
       for (let col = 0; col < cols; col += 1) {
         const estimate = estimateField(samples, xs[col], ys[row], INFLUENCE_KM);
@@ -272,8 +301,9 @@ export class MigrationField {
     }
 
     const totals = cumulative(perCell);
-    const target = Math.min(MAX_BIRDS, Math.round(totals[cells - 1] ?? 0));
-    return { cols, rows, density, u, v, totals, target };
+    const budget = scale.mode === "dots" ? MAX_DOTS : MAX_BIRDS;
+    const target = Math.min(budget, Math.round(totals[cells - 1] ?? 0));
+    return { cols, rows, density, u, v, totals, target, scale };
   }
 
   private cellAt(x: number, y: number): number {
@@ -381,12 +411,53 @@ export class MigrationField {
     this.draw(context);
   }
 
-  /** Draws the flock in three opacity passes, so fading birds batch too. */
   private draw(context: CanvasRenderingContext2D): void {
+    if (this.grid?.scale.mode === "dots") this.drawDots(context);
+    else this.drawBirds(context, this.grid?.scale.span ?? BIRD_SPAN_PX);
+  }
+
+  /**
+   * Zoomed far out: each bird is a single pixel, and its trail is what is left
+   * of the pixels it lit in earlier frames, faded a little every frame. Tens of
+   * thousands of dots are only affordable written straight into a buffer; as
+   * canvas strokes the same flock costs fifty times as much.
+   */
+  private drawDots(context: CanvasRenderingContext2D): void {
+    const dots = this.dotCanvas.getContext("2d");
+    if (!dots) return;
+    const { width, height } = this.dotCanvas;
+    if (!this.dotImage) this.dotImage = dots.createImageData(width, height);
+    const data = this.dotImage.data;
+
+    for (let alpha = 3; alpha < data.length; alpha += 4) {
+      if (data[alpha] !== 0) data[alpha] = (data[alpha] * DOT_TRAIL_KEEP) | 0;
+    }
+
+    const [r, g, b] = this.ink.split(",").map(Number);
+    for (const bird of this.birds) {
+      const x = bird.x | 0;
+      const y = bird.y | 0;
+      if (x < 0 || y < 0 || x >= width || y >= height) continue;
+      const offset = (y * width + x) * 4;
+      data[offset] = r;
+      data[offset + 1] = g;
+      data[offset + 2] = b;
+      data[offset + 3] = DOT_ALPHA;
+    }
+
+    dots.putImageData(this.dotImage, 0, 0);
+    context.clearRect(0, 0, this.width, this.height);
+    context.imageSmoothingEnabled = false;
+    context.drawImage(this.dotCanvas, 0, 0, this.width, this.height);
+  }
+
+  /** Draws the flock in three opacity passes, so fading birds batch too. */
+  private drawBirds(context: CanvasRenderingContext2D, span: number): void {
     context.clearRect(0, 0, this.width, this.height);
     context.lineWidth = BIRD_STROKE_PX;
-    context.lineCap = "round";
-    context.lineJoin = "round";
+    // Round caps cost twice as much to stroke and are invisible at this size.
+    context.lineCap = "butt";
+    context.lineJoin = "miter";
 
     for (const [floor, alpha] of [
       [0, 0.3],
@@ -403,7 +474,7 @@ export class MigrationField {
           bird.x,
           bird.y,
           bird.heading,
-          BIRD_SPAN_PX,
+          span,
           bird.phase,
         );
         context.moveTo(lx, ly);
@@ -426,6 +497,9 @@ export class MigrationField {
       bird.life = FADE_MS * 3;
       bird.phase = 0.25;
     }
+    // A still frame has no past to trail behind it.
+    this.dotImage?.data.fill(0);
+    context.clearRect(0, 0, this.width, this.height);
     this.draw(context);
   }
 }
