@@ -33,12 +33,45 @@ const NOTHING: FieldEstimate = { value: 0, coverage: 0, u: 0, v: 0 };
 /** Keeps the weight finite directly on top of a sample. */
 const EPSILON = 1e-6;
 
+export interface Velocity {
+  u: number;
+  v: number;
+}
+
+/**
+ * One velocity out of several, with the heading and the speed averaged apart.
+ *
+ * Averaging velocities component by component drags a turn through the
+ * middle: two radars whose birds differ by a right angle give a point between
+ * them that is 30% slower than either, and two that disagree outright give a
+ * dead spot where the birds stop dead and start again facing the other way.
+ * Real birds between two such radars are flying at their own speed on some
+ * heading between the two, so the headings are averaged as headings, the
+ * short way round, and the speeds as speeds.
+ *
+ * Callers accumulate `dirX` and `dirY` as weighted unit headings and pass the
+ * weighted mean `speed`. Directly opposed headings cancel and leave no mean
+ * to normalise; there the fallback stands in, which is the nearest radar's
+ * own reading, and the two sides of that line each fly what they measured.
+ */
+export function meanVelocity(
+  dirX: number,
+  dirY: number,
+  speed: number,
+  fallback: Velocity,
+): Velocity {
+  const length = Math.hypot(dirX, dirY);
+  if (length <= EPSILON) return { u: fallback.u, v: fallback.v };
+  return { u: (dirX / length) * speed, v: (dirY / length) * speed };
+}
+
 /**
  * Estimates the field at (x, y) from the samples within `influence`.
  *
  * Weights fall off as 1/d², which is the usual choice: gentle enough to blend
  * neighbouring radars, sharp enough that a distant one cannot outvote the one
- * overhead.
+ * overhead. Density is averaged as a number and the velocity as a movement,
+ * which is not the same operation: see meanVelocity.
  */
 export function estimateField(
   samples: readonly FieldSample[],
@@ -48,9 +81,12 @@ export function estimateField(
 ): FieldEstimate {
   let weightSum = 0;
   let valueSum = 0;
-  let uSum = 0;
-  let vSum = 0;
+  let dirX = 0;
+  let dirY = 0;
+  let speedSum = 0;
+  let flowWeight = 0;
   let nearest = Infinity;
+  const nearestFlow: Velocity = { u: 0, v: 0 };
 
   for (const sample of samples) {
     const dx = sample.x - x;
@@ -58,23 +94,42 @@ export function estimateField(
     const squared = dx * dx + dy * dy;
     if (squared >= influence * influence) continue;
     const distance = Math.sqrt(squared);
-    if (distance < nearest) nearest = distance;
     const weight = 1 / (squared + EPSILON);
     weightSum += weight;
     valueSum += weight * sample.value;
-    uSum += weight * (sample.u ?? 0);
-    vSum += weight * (sample.v ?? 0);
+
+    const u = sample.u ?? 0;
+    const v = sample.v ?? 0;
+    if (distance < nearest) {
+      nearest = distance;
+      nearestFlow.u = u;
+      nearestFlow.v = v;
+    }
+    // A radar that resolved no velocity has no heading to average in, and no
+    // speed either: a zero there means unknown, not still.
+    const speed = Math.hypot(u, v);
+    if (speed === 0) continue;
+    flowWeight += weight;
+    dirX += (weight * u) / speed;
+    dirY += (weight * v) / speed;
+    speedSum += weight * speed;
   }
 
   if (weightSum === 0) return NOTHING;
   // Linear in distance rather than in the weight, so the fade reads as a soft
   // edge at the rim of coverage instead of a hard disc around each radar.
   const coverage = Math.max(0, 1 - nearest / influence);
+  const flow = meanVelocity(
+    dirX,
+    dirY,
+    flowWeight > 0 ? speedSum / flowWeight : 0,
+    nearestFlow,
+  );
   return {
     value: valueSum / weightSum,
     coverage,
-    u: uSum / weightSum,
-    v: vSum / weightSum,
+    u: flow.u,
+    v: flow.v,
   };
 }
 

@@ -8,6 +8,7 @@ import {
   type GeoSample,
   type Theme,
 } from "@/components/migration-field";
+import { unifyFlow } from "@/lib/flow";
 import {
   formatClock,
   formatDensity,
@@ -221,12 +222,12 @@ export function BirdMap({
       const radius = L.circle([radar.latitude, radar.longitude], {
         radius: INFLUENCE_KM * 1000,
         className: "bird-radius",
-        // The disc is a backdrop; hovering it should still find the station.
+        // A border round the ground a radar answers for; hovering inside it
+        // should still find the station rather than the ring.
         interactive: false,
         pane: RADIUS_PANE,
-        stroke: false,
-        // The fade lives in the gradient the stylesheet fills with.
-        fillOpacity: 1,
+        fill: false,
+        weight: 1,
       });
       radius.addTo(radiusGroup);
       radiiRef.current.set(radar.id, radius);
@@ -282,28 +283,17 @@ export function BirdMap({
     }
     activeRef.current = active;
     paintRadii(radiiRef.current, active);
-    field.setSamples(samples, blendMsRef.current);
+    // Neighbouring radars agree on one heading before the birds fly it, so
+    // the flock moves as a front rather than in a cell per station. The
+    // tooltips above keep each radar's own reading.
+    field.setSamples(unifyFlow(samples), blendMsRef.current);
   }, [frame, radars, mapReady]);
 
   return (
-    <div className="relative z-0 size-full">
-      <div
-        aria-label="Map of bird migration over Europe"
-        className="size-full"
-        ref={containerRef}
-      />
-      {/* Referenced by .bird-radius in the stylesheet. A gradient cannot be
-          written in CSS, so it sits here, out of the layout, and picks the
-          signal colour up from the theme like everything else. */}
-      <svg aria-hidden="true" className="absolute size-0" focusable="false">
-        <defs>
-          <radialGradient id="bird-radius-fade">
-            <stop offset="0%" stopColor="var(--signal)" stopOpacity="0.22" />
-            <stop offset="55%" stopColor="var(--signal)" stopOpacity="0.1" />
-            <stop offset="100%" stopColor="var(--signal)" stopOpacity="0" />
-          </radialGradient>
-        </defs>
-      </svg>
-    </div>
+    <div
+      aria-label="Map of bird migration over Europe"
+      className="relative z-0 size-full"
+      ref={containerRef}
+    />
   );
 }

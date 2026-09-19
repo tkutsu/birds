@@ -91,13 +91,15 @@ summary {
   height: 100%;
 }
 
-/* How far one radar's reading is allowed to travel, drawn only while that
-   radar has birds over it. It fades out at its own rim, because coverage
-   really does fall off with distance rather than stopping at a line, and it
-   fades in and out over a couple of frames so the network breathes with the
-   night. */
+/* The border of the ground one radar answers for, drawn only while that radar
+   has birds over it, and faded in and out so the network breathes with the
+   night instead of flashing frame by frame. */
 .bird-radius {
-  fill: url(#bird-radius-fade);
+  fill: none;
+  stroke: var(--signal);
+  stroke-width: 1;
+  stroke-opacity: 0.5;
+  stroke-dasharray: 3 5;
   opacity: 0;
   transition: opacity 700ms ease-out;
 }

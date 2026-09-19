@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { cumulative, estimateField, pickWeighted } from "@/lib/grid";
+import {
+  cumulative,
+  estimateField,
+  meanVelocity,
+  pickWeighted,
+} from "@/lib/grid";
 
 const samples = [
   { x: 0, y: 0, value: 100, u: 10, v: 0 },
@@ -35,10 +40,45 @@ describe("estimateField", () => {
     expect(half).toBeCloseTo(0.5);
   });
 
-  it("interpolates the vector alongside the scalar", () => {
+  it("turns the flow between two radars without slowing it down", () => {
+    // One radar's birds fly east at 10 m/s, the other's north at 10 m/s.
     const middle = estimateField(samples, 50, 0, 200);
-    expect(middle.u).toBeCloseTo(5, 1);
-    expect(middle.v).toBeCloseTo(5, 1);
+    expect(Math.hypot(middle.u, middle.v)).toBeCloseTo(10, 1);
+    expect(middle.u).toBeCloseTo(middle.v, 1);
+  });
+
+  it("leans the heading towards the nearer radar", () => {
+    const near = estimateField(samples, 25, 0, 200);
+    expect(near.u).toBeGreaterThan(near.v);
+    expect(Math.hypot(near.u, near.v)).toBeCloseTo(10, 1);
+  });
+
+  it("flies what the nearest radar saw where two radars face each other", () => {
+    const opposed = [
+      { x: 0, y: 0, value: 10, u: 10, v: 0 },
+      { x: 100, y: 0, value: 10, u: -10, v: 0 },
+    ];
+    // Halfway there is no mean heading to be had, so nothing is invented.
+    expect(estimateField(opposed, 50, 0, 200).u).toBeCloseTo(10);
+    expect(estimateField(opposed, 60, 0, 200).u).toBeCloseTo(-10);
+  });
+
+  it("takes no speed from a radar that resolved no velocity", () => {
+    const partial = [
+      { x: 0, y: 0, value: 10, u: 0, v: 0 },
+      { x: 100, y: 0, value: 10, u: 0, v: 8 },
+    ];
+    expect(estimateField(partial, 20, 0, 200).v).toBeCloseTo(8);
+  });
+});
+
+describe("meanVelocity", () => {
+  it("normalises the summed headings back up to the mean speed", () => {
+    expect(meanVelocity(3, 0, 12, { u: 0, v: 0 })).toEqual({ u: 12, v: 0 });
+  });
+
+  it("falls back when the headings cancel out", () => {
+    expect(meanVelocity(0, 0, 12, { u: 1, v: 2 })).toEqual({ u: 1, v: 2 });
   });
 });
 
