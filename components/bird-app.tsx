@@ -2,7 +2,6 @@
 
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { BirdMap } from "@/components/bird-map";
-import { Legend } from "@/components/legend";
 import type { Theme } from "@/components/migration-field";
 import {
   PLAY_STEP_MS,
@@ -158,59 +157,8 @@ export function BirdApp() {
               </Chip>
             </>
           )}
-        </div>
 
-        <div className="absolute top-3 right-3 z-[500] flex flex-col items-end gap-2">
-          <div className="flex gap-2">
-            <button
-              aria-pressed={showRadars}
-              className={`flex h-9 items-center gap-1.5 rounded-full border px-3 text-xs shadow-lg backdrop-blur transition ${
-                showRadars
-                  ? "border-signal/60 bg-paper text-signal"
-                  : "border-ink/15 bg-paper/90 hover:bg-paper"
-              }`}
-              onClick={() => setShowRadars((shown) => !shown)}
-              type="button"
-            >
-              <RadarIcon className="size-4" />
-              Radars
-            </button>
-            <button
-              aria-label="Toggle dark mode"
-              className="flex size-9 items-center justify-center rounded-full border border-ink/15 bg-paper/90 shadow-lg backdrop-blur transition hover:bg-paper"
-              onClick={toggleTheme}
-              type="button"
-            >
-              {theme === "dark" ? (
-                <SunIcon className="size-4" />
-              ) : (
-                <MoonIcon className="size-4" />
-              )}
-            </button>
-          </div>
-
-          {nights.length > 1 && (
-            <select
-              aria-label="Night"
-              className="rounded-full border border-ink/15 bg-paper/90 px-3 py-1.5 text-xs shadow-lg backdrop-blur"
-              onChange={(event) => {
-                setNightIndex(Number(event.target.value));
-                setFrameIndex(0);
-                setPlaying(false);
-              }}
-              value={nightIndex}
-            >
-              {nights.map((option, index) => (
-                <option key={option.date} value={index}>
-                  {formatNightLabel(option.date)}
-                </option>
-              ))}
-            </select>
-          )}
-
-          <Legend />
-
-          <details className="max-w-[15rem] rounded-xl border border-ink/15 bg-paper/90 px-3 py-2 text-xs shadow-lg backdrop-blur">
+          <details className="pointer-events-auto max-w-[15rem] rounded-xl border border-ink/15 bg-paper/90 px-3 py-2 text-xs shadow-lg backdrop-blur">
             <summary className="font-medium">About this map</summary>
             <div className="mt-2 space-y-2 leading-snug opacity-80">
               <p>
@@ -240,15 +188,66 @@ export function BirdApp() {
           </details>
         </div>
 
-        {night && night.frames.length > 1 && (
-          <TimelineControls
-            index={Math.min(frameIndex, night.frames.length - 1)}
-            night={night}
-            onPlayingChange={setPlaying}
-            onSelect={setFrameIndex}
-            playing={playing}
-          />
-        )}
+        <div className="absolute top-3 right-3 z-[500] flex flex-col items-end gap-2">
+          <button
+            aria-label="Toggle dark mode"
+            className="flex size-9 items-center justify-center rounded-full border border-ink/15 bg-paper/90 shadow-lg backdrop-blur transition hover:bg-paper"
+            onClick={toggleTheme}
+            type="button"
+          >
+            {theme === "dark" ? (
+              <SunIcon className="size-4" />
+            ) : (
+              <MoonIcon className="size-4" />
+            )}
+          </button>
+
+          {nights.length > 1 && (
+            <select
+              aria-label="Night"
+              className="rounded-full border border-ink/15 bg-paper/90 px-3 py-1.5 text-xs shadow-lg backdrop-blur"
+              onChange={(event) => {
+                setNightIndex(Number(event.target.value));
+                setFrameIndex(0);
+                setPlaying(false);
+              }}
+              value={nightIndex}
+            >
+              {nights.map((option, index) => (
+                <option key={option.date} value={index}>
+                  {formatNightLabel(option.date)}
+                </option>
+              ))}
+            </select>
+          )}
+
+        </div>
+
+        <div className="pointer-events-none absolute right-3 bottom-6 left-3 z-[500] flex flex-col items-center gap-2">
+          <button
+            aria-pressed={showRadars}
+            className={`pointer-events-auto flex h-9 items-center gap-1.5 rounded-full border px-3 text-xs shadow-lg backdrop-blur transition ${
+              showRadars
+                ? "border-signal/60 bg-paper text-signal"
+                : "border-ink/15 bg-paper/90 hover:bg-paper"
+            }`}
+            onClick={() => setShowRadars((shown) => !shown)}
+            type="button"
+          >
+            <RadarIcon className="size-4" />
+            Radars
+          </button>
+
+          {night && night.frames.length > 1 && (
+            <TimelineControls
+              index={Math.min(frameIndex, night.frames.length - 1)}
+              night={night}
+              onPlayingChange={setPlaying}
+              onSelect={setFrameIndex}
+              playing={playing}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

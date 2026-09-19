@@ -4,7 +4,8 @@
  * The map has no colour scale. A place with more birds aloft simply has more
  * birds drawn over it, in proportion: twice the density, twice the birds. The
  * count is fixed per square kilometre at the closest zoom, so zooming out
- * keeps every bird and only makes them smaller.
+ * mostly keeps every bird and makes them smaller; once they are dots the
+ * flock is thinned evenly, which leaves the proportion intact.
  */
 
 /**

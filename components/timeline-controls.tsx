@@ -60,7 +60,7 @@ export function TimelineControls({
   const current = night.frames[index];
 
   return (
-    <div className="absolute right-3 bottom-6 left-3 z-[500] mx-auto flex max-w-[46rem] items-center gap-2 rounded-2xl border border-ink/15 bg-paper/90 px-3 py-3 shadow-xl backdrop-blur sm:gap-3 sm:px-4">
+    <div className="pointer-events-auto flex w-full max-w-[46rem] items-center gap-2 rounded-2xl border border-ink/15 bg-paper/90 px-3 py-3 shadow-xl backdrop-blur sm:gap-3 sm:px-4">
       <button
         aria-label={playing ? "Pause" : "Play the night"}
         className="flex size-9 shrink-0 items-center justify-center rounded-full bg-signal text-white shadow-sm transition hover:brightness-110"

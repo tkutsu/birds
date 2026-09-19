@@ -35,7 +35,7 @@ export type Theme = "light" | "dark";
  * continuous field and leaves the sparse part visibly empty, which is the
  * truth about European radar coverage and should look like it.
  */
-const INFLUENCE_KM = 220;
+export const INFLUENCE_KM = 220;
 
 /** Screen pixels per cell of the interpolation grid. */
 const CELL_PX = 6;
@@ -68,6 +68,15 @@ const FADE_MS = 300;
  */
 const MAX_BIRDS = 6000;
 const MAX_DOTS = 40000;
+/**
+ * Share of the flock drawn once the birds have turned to dots.
+ *
+ * A dot and its trail cover more screen than a distant bird's two thin
+ * strokes, so carrying literally every bird out to the widest zoom reads
+ * heavier than the same sky does up close. Thinning evenly leaves the relative
+ * density between one place and another exactly as it was.
+ */
+const DOT_SHARE = 0.65;
 /** Share of a dot's trail kept each frame; sets how long the trail is. */
 const DOT_TRAIL_KEEP = 0.84;
 const DOT_ALPHA = 220;
@@ -364,8 +373,12 @@ export class MigrationField {
     }
 
     const totals = cumulative(perCell);
-    const budget = scale.mode === "dots" ? MAX_DOTS : MAX_BIRDS;
-    const target = Math.min(budget, Math.round(totals[cells - 1] ?? 0));
+    const dots = scale.mode === "dots";
+    const budget = dots ? MAX_DOTS : MAX_BIRDS;
+    const target = Math.min(
+      budget,
+      Math.round((totals[cells - 1] ?? 0) * (dots ? DOT_SHARE : 1)),
+    );
     return { cols, rows, density, u, v, totals, target, scale };
   }
 
