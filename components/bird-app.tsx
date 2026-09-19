@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { BirdMap } from "@/components/bird-map";
 import type { Theme } from "@/components/migration-field";
 import {
@@ -8,13 +8,7 @@ import {
   TimelineControls,
 } from "@/components/timeline-controls";
 import { useNights } from "@/hooks/use-nights";
-import {
-  formatDensity,
-  formatNightLabel,
-  formatSpeed,
-  headingLabel,
-  summarizeFrame,
-} from "@/lib/format";
+import { formatNightLabel } from "@/lib/format";
 
 /**
  * The theme lives on the document element, stamped by a script that runs
@@ -114,8 +108,6 @@ export function BirdApp() {
   const nights = payload?.nights ?? [];
   const night = nights[Math.min(nightIndex, Math.max(0, nights.length - 1))];
   const frame = night?.frames[Math.min(frameIndex, night.frames.length - 1)];
-  const summary = useMemo(() => summarizeFrame(frame), [frame]);
-  const heading = headingLabel(summary.u, summary.v);
 
   return (
     <div className="relative flex h-dvh flex-col">
@@ -137,25 +129,11 @@ export function BirdApp() {
             </span>
           )}
           {night && (
-            <>
-              <Chip>
-                <strong className="font-semibold">
-                  Night of {formatNightLabel(night.date)}
-                </strong>
-              </Chip>
-              <Chip>
-                {summary.peakVid < 1
-                  ? "An empty sky"
-                  : `Up to ${formatDensity(summary.peakVid)} birds/km²`}
-                {heading
-                  ? ` · heading ${heading} at ${formatSpeed(summary.u, summary.v)}`
-                  : ""}
-              </Chip>
-              <Chip>
-                {summary.active} of {payload?.radars.length ?? 0} radars seeing
-                birds
-              </Chip>
-            </>
+            <Chip>
+              <strong className="font-semibold">
+                Night of {formatNightLabel(night.date)}
+              </strong>
+            </Chip>
           )}
 
           <details className="pointer-events-auto max-w-[15rem] rounded-xl border border-ink/15 bg-paper/90 px-3 py-2 text-xs shadow-lg backdrop-blur">

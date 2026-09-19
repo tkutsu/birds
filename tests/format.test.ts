@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  formatClock,
-  formatNightLabel,
-  headingLabel,
-  summarizeFrame,
-} from "@/lib/format";
+import { formatClock, formatNightLabel, headingLabel } from "@/lib/format";
 
 describe("formatClock", () => {
   it("shows UTC, which is the clock the whole map is on", () => {
@@ -32,25 +27,5 @@ describe("headingLabel", () => {
 
   it("says nothing when the flight is too slow to have a direction", () => {
     expect(headingLabel(0.1, 0.1)).toBeNull();
-  });
-});
-
-describe("summarizeFrame", () => {
-  it("weights the network's heading by density", () => {
-    const summary = summarizeFrame({
-      at: "2026-09-09T22:00:00.000Z",
-      samples: [
-        { r: 0, vid: 90, mtr: 0, u: 10, v: 0 },
-        { r: 1, vid: 10, mtr: 0, u: 0, v: 10 },
-      ],
-    });
-    expect(summary.u).toBeCloseTo(9);
-    expect(summary.peakVid).toBe(90);
-    expect(summary.meanVid).toBeCloseTo(50);
-    expect(summary.active).toBe(2);
-  });
-
-  it("survives a frame nobody reported", () => {
-    expect(summarizeFrame(undefined).peakVid).toBe(0);
   });
 });

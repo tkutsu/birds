@@ -28,7 +28,7 @@ const FIELD_PANE = "bird-field";
 /** Set on a radar while nothing is flying over it; the CSS fades it back. */
 const RADAR_QUIET = "bird-radar--quiet";
 
-/** The density at which a radar counts as active, as in summarizeFrame. */
+/** Birds/km2 over a radar for it to count as seeing anything at all. */
 const ACTIVE_VID = 1;
 
 /** Radars are 150 km apart; zooming further in shows the birds no better. */

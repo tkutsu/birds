@@ -1,5 +1,3 @@
-import type { NightFrame } from "@/lib/types";
-
 /** Everything is shown in UTC: a continent-wide night has no single local clock. */
 export function formatClock(iso: string): string {
   return iso.slice(11, 16);
@@ -58,51 +56,4 @@ export function headingLabel(u: number, v: number): string | null {
 /** Ground speed in km/h, which is how fast a bird reads to a person. */
 export function formatSpeed(u: number, v: number): string {
   return `${Math.round(Math.hypot(u, v) * 3.6)} km/h`;
-}
-
-export interface FrameSummary {
-  /** Radars reporting any birds at all. */
-  active: number;
-  peakVid: number;
-  meanVid: number;
-  u: number;
-  v: number;
-}
-
-/** The one-line state of the sky at a given moment. */
-export function summarizeFrame(frame: NightFrame | undefined): FrameSummary {
-  const empty: FrameSummary = {
-    active: 0,
-    peakVid: 0,
-    meanVid: 0,
-    u: 0,
-    v: 0,
-  };
-  if (!frame || frame.samples.length === 0) return empty;
-
-  let peakVid = 0;
-  let total = 0;
-  let weight = 0;
-  let uSum = 0;
-  let vSum = 0;
-  let active = 0;
-
-  for (const sample of frame.samples) {
-    total += sample.vid;
-    if (sample.vid > peakVid) peakVid = sample.vid;
-    if (sample.vid > 1) active += 1;
-    // Heading is weighted by density: a radar under an empty sky has an
-    // opinion about direction, and it should not count for much.
-    uSum += sample.vid * sample.u;
-    vSum += sample.vid * sample.v;
-    weight += sample.vid;
-  }
-
-  return {
-    active,
-    peakVid,
-    meanVid: total / frame.samples.length,
-    u: weight > 0 ? uSum / weight : 0,
-    v: weight > 0 ? vSum / weight : 0,
-  };
 }
