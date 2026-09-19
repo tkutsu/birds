@@ -35,7 +35,7 @@ export type Theme = "light" | "dark";
  * continuous field and leaves the sparse part visibly empty, which is the
  * truth about European radar coverage and should look like it.
  */
-export const INFLUENCE_KM = 220;
+const INFLUENCE_KM = 220;
 
 /** Screen pixels per cell of the interpolation grid. */
 const CELL_PX = 6;

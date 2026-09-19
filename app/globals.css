@@ -91,34 +91,24 @@ summary {
   height: 100%;
 }
 
-/* The border of the ground one radar answers for, drawn only while that radar
-   has birds over it, and faded in and out so the network breathes with the
-   night instead of flashing frame by frame. */
-.bird-radius {
-  fill: none;
-  stroke: var(--signal);
-  stroke-width: 1;
-  stroke-opacity: 0.5;
-  stroke-dasharray: 3 5;
-  opacity: 0;
-  transition: opacity 700ms ease-out;
-}
-
-.bird-radius.bird-radius--on {
-  opacity: 1;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .bird-radius {
-    transition: none;
-  }
-}
-
 .bird-radar {
   border-radius: 9999px;
   background: rgb(var(--ink-rgb) / 0.55);
   box-shadow: 0 0 0 1.5px rgb(var(--paper-rgb) / 0.85);
-  transition: background 120ms ease-out;
+  transition: background 120ms ease-out, opacity 700ms ease-out;
+}
+
+/* A radar with nothing flying over it is still reporting, so it stays on the
+   map, held back to half so the stations carrying the night read first. It
+   fades rather than switches, or playback would flicker the whole network. */
+.bird-radar--quiet .bird-radar {
+  opacity: 0.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bird-radar {
+    transition: none;
+  }
 }
 
 .bird-radar:hover {

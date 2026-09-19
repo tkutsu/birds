@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Circle, LayerGroup, Map as LeafletMap, Marker } from "leaflet";
+import type { LayerGroup, Map as LeafletMap, Marker } from "leaflet";
 import {
-  INFLUENCE_KM,
   MigrationField,
   type GeoSample,
   type Theme,
@@ -26,9 +25,8 @@ const EUROPE_BOUNDS: [[number, number], [number, number]] = [
 
 const RADAR_ICON_PX = 9;
 const FIELD_PANE = "bird-field";
-const RADIUS_PANE = "bird-radius";
-/** Set on a radius disc while its radar is seeing birds; the CSS fades it. */
-const RADIUS_ACTIVE = "bird-radius--on";
+/** Set on a radar while nothing is flying over it; the CSS fades it back. */
+const RADAR_QUIET = "bird-radar--quiet";
 
 /** The density at which a radar counts as active, as in summarizeFrame. */
 const ACTIVE_VID = 1;
@@ -69,14 +67,14 @@ function radarTooltip(
 }
 
 /**
- * Shows a disc around every radar that is currently seeing birds, and hides it
- * again when the radar goes quiet. The class is toggled rather than the layer
- * added and removed so the discs cross-fade with the night instead of popping
- * in and out frame by frame.
+ * Holds back every radar that has nothing flying over it, so the stations
+ * carrying the night stand out from the ones that are merely switched on. The
+ * class is toggled rather than the marker replaced, which lets the CSS fade
+ * one into the other instead of popping frame by frame.
  */
-function paintRadii(circles: Map<string, Circle>, active: Set<string>): void {
-  for (const [id, circle] of circles) {
-    circle.getElement()?.classList.toggle(RADIUS_ACTIVE, active.has(id));
+function paintRadars(markers: Map<string, Marker>, active: Set<string>): void {
+  for (const [id, marker] of markers) {
+    marker.getElement()?.classList.toggle(RADAR_QUIET, !active.has(id));
   }
 }
 
@@ -94,10 +92,8 @@ export function BirdMap({
   const fieldRef = useRef<MigrationField | null>(null);
   const markersRef = useRef<Map<string, Marker>>(new Map());
   const markerGroupRef = useRef<LayerGroup | null>(null);
-  const radiiRef = useRef<Map<string, Circle>>(new Map());
-  const radiusGroupRef = useRef<LayerGroup | null>(null);
   // Which radars the current frame has birds over, kept outside the render so
-  // the discs can be repainted when the layer is switched back on.
+  // the stations can be repainted when the layer is switched back on.
   const activeRef = useRef<Set<string>>(new Set());
   const [mapReady, setMapReady] = useState(false);
   // Read when a frame arrives, so starting or stopping playback does not
@@ -114,7 +110,6 @@ export function BirdMap({
     let cancelled = false;
     let disconnect: (() => void) | undefined;
     const markers = markersRef.current;
-    const radii = radiiRef.current;
 
     const initialize = async () => {
       const L = await import("leaflet");
@@ -148,14 +143,7 @@ export function BirdMap({
       const pane = map.createPane(FIELD_PANE);
       pane.style.zIndex = "250";
       fieldRef.current = new MigrationField(map, pane);
-
-      // The discs read as reach, so they belong over the field they explain,
-      // and under the stations they belong to.
-      const radiusPane = map.createPane(RADIUS_PANE);
-      radiusPane.style.zIndex = "450";
-
       markerGroupRef.current = L.layerGroup();
-      radiusGroupRef.current = L.layerGroup();
       mapRef.current = map;
       setMapReady(true);
 
@@ -178,9 +166,7 @@ export function BirdMap({
       mapRef.current?.remove();
       mapRef.current = null;
       markerGroupRef.current = null;
-      radiusGroupRef.current = null;
       markers.clear();
-      radii.clear();
       setMapReady(false);
     };
     // The map instance is deliberately created only once.
@@ -193,17 +179,14 @@ export function BirdMap({
   useEffect(() => {
     const map = mapRef.current;
     const group = markerGroupRef.current;
-    const radii = radiusGroupRef.current;
-    if (!map || !group || !radii || !mapReady) return;
+    if (!map || !group || !mapReady) return;
     if (showRadars) {
-      radii.addTo(map);
       group.addTo(map);
-      // The discs were just created, so they start off hidden: light up the
-      // ones the frame on screen has already reported.
-      paintRadii(radiiRef.current, activeRef.current);
+      // The markers were only just built: hold back the quiet ones to match
+      // the frame already on screen.
+      paintRadars(markersRef.current, activeRef.current);
     } else {
       group.remove();
-      radii.remove();
     }
   }, [showRadars, mapReady]);
 
@@ -211,26 +194,11 @@ export function BirdMap({
   useEffect(() => {
     const L = leafletRef.current;
     const group = markerGroupRef.current;
-    const radiusGroup = radiusGroupRef.current;
-    if (!L || !group || !radiusGroup || !mapReady) return;
+    if (!L || !group || !mapReady) return;
 
     group.clearLayers();
-    radiusGroup.clearLayers();
     markersRef.current.clear();
-    radiiRef.current.clear();
     for (const radar of radars) {
-      const radius = L.circle([radar.latitude, radar.longitude], {
-        radius: INFLUENCE_KM * 1000,
-        className: "bird-radius",
-        // A border round the ground a radar answers for; hovering inside it
-        // should still find the station rather than the ring.
-        interactive: false,
-        pane: RADIUS_PANE,
-        fill: false,
-        weight: 1,
-      });
-      radius.addTo(radiusGroup);
-      radiiRef.current.set(radar.id, radius);
 
       const marker = L.marker([radar.latitude, radar.longitude], {
         icon: L.divIcon({
@@ -282,7 +250,7 @@ export function BirdMap({
       }
     }
     activeRef.current = active;
-    paintRadii(radiiRef.current, active);
+    paintRadars(markersRef.current, active);
     // Neighbouring radars agree on one heading before the birds fly it, so
     // the flock moves as a front rather than in a cell per station. The
     // tooltips above keep each radar's own reading.
