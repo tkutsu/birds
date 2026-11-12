@@ -1,4 +1,4 @@
-# Bird Migration Radar
+# <img src="docs/icon.svg" alt="" width="40" align="center"> Bird Migration Radar
 
 Animated map of nocturnal bird migration over Europe, built from weather-radar
 bird density profiles.
